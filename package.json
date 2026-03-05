@@ -1,6 +1,9 @@
 {
-  "type": "module",
-  "dependencies": {
-    "openai": "^4.0.0"
+  "name": "gemini-mvp-spa",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "vercel dev",
+    "deploy": "vercel"
   }
 }
