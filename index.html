@@ -682,10 +682,10 @@
         tbody.appendChild(tr);
       });
 
-      const table = document.getElementById('data-table');
-      table.innerHTML = '';
-      table.appendChild(thead);
-      table.appendChild(tbody);
+      const tableEl = document.getElementById('data-table');
+      tableEl.innerHTML = '';
+      tableEl.appendChild(thead);
+      tableEl.appendChild(tbody);
     }
 
     async function searchTable() {
