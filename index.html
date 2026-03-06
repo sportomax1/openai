@@ -947,7 +947,45 @@
                 dbg('dbg-ok', `✅ Reply OK  model=${data.model_used || '?'}  reply_len=${(data.reply||'').length}  latency=${data.latency_ms ?? elapsed}ms`);
                 setStatus(`✓ ${data.model_used || 'ok'}`, 'green');
                 
-                const reply = data.reply || '(empty reply)';
+                let reply = data.reply || '(empty reply)';
+                
+                // Check for Supabase CRUD JSON blocks in response
+                const jsonBlockRegex = /```json\s*(\{[\s\S]*?\})\s*```/;
+                const jsonMatch = reply.match(jsonBlockRegex);
+                
+                if (jsonMatch) {
+                  try {
+                    const crudOp = JSON.parse(jsonMatch[1]);
+                    dbg('dbg-info', `🗄️ Detected CRUD operation:`, JSON.stringify(crudOp));
+                    
+                    // Remove the JSON block from the display
+                    reply = reply.replace(jsonBlockRegex, '').trim();
+                    
+                    // Execute the CRUD operation
+                    const crudRes = await fetch('/api/supabase', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(crudOp),
+                    });
+                    
+                    const crudData = await crudRes.json();
+                    
+                    if (crudData.ok) {
+                      dbg('dbg-ok', `✅ CRUD Success: ${crudOp.action} on ${crudOp.table}`);
+                      // Append results to reply
+                      if (crudData.rows && crudData.rows.length > 0) {
+                        reply += `\n\n**📊 Results:**\n\`\`\`json\n${JSON.stringify(crudData.rows, null, 2)}\n\`\`\``;
+                      } else if (crudOp.action === 'DELETE' || crudOp.action === 'UPDATE' || crudOp.action === 'CREATE') {
+                        reply += `\n\n**✅ Operation completed successfully!**`;
+                      }
+                    } else {
+                      dbg('dbg-error', `❌ CRUD Failed: ${crudData.error}`);
+                      reply += `\n\n**❌ Database Error:** ${crudData.error}`;
+                    }
+                  } catch (crudErr) {
+                    dbg('dbg-warn', `CRUD execution error: ${crudErr.message}`);
+                  }
+                }
                 
                 // Add AI response to conversation history
                 conversationMessages.push({ role: 'ai', content: reply, model: data.model_used, timestamp: _ts() });
