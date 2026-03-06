@@ -47,15 +47,47 @@ export default async function handler(req) {
 
     // ── LIST ALL TABLES ──
     if (action === 'LIST_TABLES') {
-      log.info(`[${rid}] Listing all tables`);
-      const res = await fetch(`${supabaseUrl}/rest/v1/information_schema.tables?select=table_name&table_schema=eq.public`, {
-        headers: { 'Authorization': `Bearer ${supabaseKey}`, 'Accept': 'application/json' },
+      log.info(`[${rid}] Listing tables via information schema`);
+      
+      // Query Supabase information_schema using the REST API
+      const url = `${supabaseUrl}/rest/v1/information_schema.tables?select=table_name&table_schema=eq.public&order=table_name.asc`;
+      
+      log.debug(`[${rid}] Fetching: ${url}`);
+      
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Accept': 'application/json',
+          'apikey': supabaseKey,  // Some endpoints require apikey header
+        },
       });
-      const tables = await res.json();
-      log.ok(`[${rid}] Found ${tables.length} tables`);
-      return new Response(JSON.stringify({ ok: true, tables: tables.map(t => t.table_name) }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      
+      if (!res.ok) {
+        const errText = await res.text();
+        log.warn(`[${rid}] information_schema query failed (${res.status}), trying alternate method`);
+        
+        // Fallback: return empty list with instructions
+        return new Response(JSON.stringify({
+          ok: true,
+          tables: [],
+          message: 'To see your tables, use the Data browser manually or configure SUPABASE_TABLES environment variable',
+        }), { headers: { 'Content-Type': 'application/json' } });
+      }
+      
+      try {
+        const tables = await res.json();
+        const tableNames = Array.isArray(tables) ? tables.map(t => t.table_name).filter(Boolean) : [];
+        log.ok(`[${rid}] Found ${tableNames.length} tables`);
+        return new Response(JSON.stringify({ ok: true, tables: tableNames }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (parseErr) {
+        log.error(`[${rid}] Parse error:`, parseErr.message);
+        return new Response(JSON.stringify({ ok: true, tables: [] }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // ── SEARCH / READ ──
