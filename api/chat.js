@@ -76,47 +76,57 @@ export default async function handler(req) {
     log.ok(`[${requestId}] 🔑 API key present (${maskedKey}), length=${apiKey.length}`);
     pushDebug({ step: 'api_key_check', ok: true, masked: maskedKey, len: apiKey.length });
 
-    // ── Model cascade ──
-    // Each entry: [model_name, api_version]
-    // We try v1beta first (newer models), then v1 (stable/older).
-    // gemini-2.0-flash is confirmed to exist on v1beta (your logs showed 429, not 404).
+    // ── Model cascade ──────────────────────────────────────────
+    // Models from Google's 2026 quickstart + stable fallbacks.
+    // Each entry: [model_name, api_version].
+    // We try newest first, skip instantly on 404/429, move to next.
+    // TOTAL budget must stay under Vercel's 25s edge timeout!
     const modelEntries = [
-      ['gemini-2.0-flash',     'v1beta'],
-      ['gemini-2.0-flash',     'v1'    ],
-      ['gemini-1.5-flash',     'v1'    ],
-      ['gemini-1.5-pro',       'v1'    ],
+      ['gemini-3-flash-preview',         'v1beta'],   // newest (from quickstart)
+      ['gemini-3.1-flash-lite-preview',  'v1beta'],   // lite variant
+      ['gemini-2.0-flash',               'v1beta'],   // stable 2.0
+      ['gemini-2.0-flash',               'v1'    ],   // stable 2.0, older endpoint
+      ['gemini-1.5-flash',               'v1'    ],   // legacy fallback
     ];
-    log.info(`[${requestId}] Will try ${modelEntries.length} model+version combos`);
+    log.info(`[${requestId}] Will try ${modelEntries.length} model+version combos (no retry waits to beat 25s timeout)`);
     modelEntries.forEach(([m, v]) => log.info(`[${requestId}]   → ${m} (${v})`));
 
     let lastError = '';
-    const MAX_429_RETRIES = 2;           // retry rate-limited calls up to 2 times
-    const RATE_LIMIT_WAIT_MS = 3000;     // wait 3s between 429 retries
+    const PER_CALL_TIMEOUT_MS = 8000;    // abort any single API call after 8s
 
-    // Helper: sleep
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    // ── Try each model+version combo ──
+    for (let i = 0; i < modelEntries.length; i++) {
+      const [model, apiVersion] = modelEntries[i];
+      const attempt = i + 1;
+      log.api(`[${requestId}] ── Attempt ${attempt}/${modelEntries.length}  model=${model}  version=${apiVersion}`);
+      pushDebug({ step: 'model_attempt', attempt, model, apiVersion });
 
-    // Helper: attempt one model call (with 429 retry)
-    async function tryModel(model, apiVersion) {
-      const apiUrl = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`;
-      const payload = { contents: [{ parts: [{ text: message }] }] };
+      try {
+        const apiUrl = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`;
+        log.debug(`[${requestId}] POST …/${apiVersion}/models/${model}:generateContent?key=***`);
 
-      for (let retry = 0; retry <= MAX_429_RETRIES; retry++) {
-        const retryLabel = retry > 0 ? ` (429-retry #${retry})` : '';
-        log.api(`[${requestId}] POST ${apiVersion}/models/${model}:generateContent${retryLabel}`);
-        log.debug(`[${requestId}] URL (masked): …/${apiVersion}/models/${model}:generateContent?key=***`);
-        pushDebug({ step: 'model_attempt', model, apiVersion, retry });
+        const payload = { contents: [{ parts: [{ text: message }] }] };
+
+        // AbortController to enforce per-call timeout
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), PER_CALL_TIMEOUT_MS);
 
         const t0 = Date.now();
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        let response;
+        try {
+          response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
         const elapsed = Date.now() - t0;
 
-        log.api(`[${requestId}] Response: status=${response.status} (${elapsed}ms)${retryLabel}`);
-        pushDebug({ step: 'api_response', model, apiVersion, status: response.status, ms: elapsed, retry });
+        log.api(`[${requestId}] Response: status=${response.status} (${elapsed}ms)`);
+        pushDebug({ step: 'api_response', model, apiVersion, status: response.status, ms: elapsed });
 
         let data;
         try {
@@ -125,7 +135,8 @@ export default async function handler(req) {
         } catch (jsonErr) {
           log.error(`[${requestId}] JSON parse failed:`, jsonErr.message);
           pushDebug({ step: 'api_json_parse', model, ok: false, error: jsonErr.message });
-          return { ok: false, error: `JSON parse error from ${model}` };
+          lastError = `JSON parse error from ${model}`;
+          continue;
         }
 
         // ── Success ──
@@ -133,64 +144,34 @@ export default async function handler(req) {
           const replyText = data.candidates[0].content.parts[0].text;
           log.ok(`[${requestId}] ✅ SUCCESS  model=${model} (${apiVersion})  reply_len=${replyText.length}  ${elapsed}ms`);
           pushDebug({ step: 'success', model, apiVersion, reply_len: replyText.length, ms: elapsed });
-          return { ok: true, replyText, model, elapsed };
-        }
 
-        // ── 429 Rate limit — retry after delay ──
-        if (response.status === 429 && retry < MAX_429_RETRIES) {
-          // Try to parse the suggested wait time from the error message
-          const errMsg = data.error?.message || '';
-          const waitMatch = errMsg.match(/retry in ([\d.]+)s/i);
-          const waitSec = waitMatch ? Math.min(parseFloat(waitMatch[1]), 10) : RATE_LIMIT_WAIT_MS / 1000;
-          const waitMs = Math.ceil(waitSec * 1000);
-          log.warn(`[${requestId}] ⏳ 429 Rate-limited on ${model} — waiting ${waitMs}ms then retrying…`);
-          pushDebug({ step: 'rate_limit_wait', model, waitMs, retry: retry + 1 });
-          await sleep(waitMs);
-          continue;      // retry same model
-        }
-
-        // ── Other failure ──
-        const errDetail = data.error?.message || JSON.stringify(data).slice(0, 300);
-        log.warn(`[${requestId}] Model ${model} (${apiVersion}) rejected: ${errDetail}`);
-        pushDebug({ step: 'model_rejected', model, apiVersion, status: response.status, error: errDetail });
-
-        if (data.error?.code === 403) {
-          log.error(`[${requestId}] 403 Forbidden — key may lack access to ${model}`);
-        }
-
-        return { ok: false, error: errDetail };
-      }
-      return { ok: false, error: `429 persisted after ${MAX_429_RETRIES} retries on ${model}` };
-    }
-
-    // ── Try each model+version combo ──
-    for (let i = 0; i < modelEntries.length; i++) {
-      const [model, apiVersion] = modelEntries[i];
-      const attempt = i + 1;
-      log.api(`[${requestId}] ── Attempt ${attempt}/${modelEntries.length}  model=${model}  version=${apiVersion}`);
-
-      try {
-        const result = await tryModel(model, apiVersion);
-
-        if (result.ok) {
           return new Response(JSON.stringify({
-            reply: result.replyText,
-            model_used: `${result.model}`,
-            latency_ms: result.elapsed,
+            reply: replyText,
+            model_used: model,
+            latency_ms: elapsed,
             debug: debugLog,
           }), { headers: { 'Content-Type': 'application/json' } });
         }
 
-        lastError = result.error;
+        // ── Failure — log detail and move to next model instantly ──
+        lastError = data.error?.message || JSON.stringify(data).slice(0, 300);
+        const code = data.error?.code || response.status;
+        log.warn(`[${requestId}] Model ${model} (${apiVersion}) → ${code}: ${lastError.slice(0, 200)}`);
+        pushDebug({ step: 'model_rejected', model, apiVersion, code, error: lastError });
+        continue;
+
       } catch (fetchErr) {
-        log.error(`[${requestId}] Fetch exception on ${model} (${apiVersion}):`, fetchErr.message);
-        pushDebug({ step: 'fetch_exception', model, apiVersion, error: fetchErr.message });
-        lastError = fetchErr.message;
+        const errMsg = fetchErr.name === 'AbortError'
+          ? `Timed out after ${PER_CALL_TIMEOUT_MS}ms` : fetchErr.message;
+        log.error(`[${requestId}] Fetch exception on ${model} (${apiVersion}): ${errMsg}`);
+        pushDebug({ step: 'fetch_exception', model, apiVersion, error: errMsg });
+        lastError = errMsg;
+        continue;
       }
     }
 
     // ── All models exhausted ──
-    log.error(`[${requestId}] ❌ ALL ${models.length} MODELS FAILED.  Last error: ${lastError}`);
+    log.error(`[${requestId}] ❌ ALL ${modelEntries.length} MODELS FAILED.  Last error: ${lastError}`);
     pushDebug({ step: 'all_models_failed', error: lastError });
 
     return new Response(JSON.stringify({
