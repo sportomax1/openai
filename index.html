@@ -118,6 +118,42 @@
             transform: scale(0.95);
         }
 
+        /* Suggestions */
+        #suggestions-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding: 8px 0;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 8px;
+        }
+        .suggestion-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 14px;
+            background: linear-gradient(135deg, #f0f4ff 0%, #fff0f6 100%);
+            border: 1px solid #cbd5e1;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .suggestion-btn:hover {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #e0e7ff 0%, #fdf2f8 100%);
+            color: #667eea;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+        .suggestion-btn:active {
+            transform: translateY(0);
+        }
+
         /* Emoji support */
         .emoji { display: inline-block; }
     </style>
@@ -146,19 +182,100 @@
     <!-- CHAT WINDOW -->
     <main id="chat-window" class="flex-1 overflow-y-auto p-6 space-y-4 chat-container max-w-4xl mx-auto w-full"></main>
 
-    <!-- INPUT -->
+    <!-- INPUT & SUGGESTIONS -->
     <footer class="glass border-t-2 border-purple-200 p-4 sticky bottom-0 shadow-lg">
-        <form id="chat-form" class="max-w-4xl mx-auto flex gap-3">
-            <input type="text" id="user-input" autocomplete="off" placeholder="Ask about pizza 🍕, basketball 🏀, or Mario Kart 64 🏎️…"
-                class="flex-1 p-3 border-2 border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm transition-all">
-            <button type="submit" id="send-btn"
-                class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-2 rounded-2xl font-semibold hover:shadow-lg shadow-md transition-all transform hover:scale-105 active:scale-95">
-                Send 🚀
-            </button>
-        </form>
+        <div class="max-w-4xl mx-auto">
+            <!-- Suggestions -->
+            <div id="suggestions-container"></div>
+            
+            <!-- Input form -->
+            <form id="chat-form" class="flex gap-3">
+                <input type="text" id="user-input" autocomplete="off" placeholder="Ask about pizza 🍕, basketball 🏀, or Mario Kart 64 🏎️…"
+                    class="flex-1 p-3 border-2 border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm transition-all">
+                <button type="submit" id="send-btn"
+                    class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-2 rounded-2xl font-semibold hover:shadow-lg shadow-md transition-all transform hover:scale-105 active:scale-95">
+                    Send 🚀
+                </button>
+            </form>
+        </div>
     </footer>
 
     <script>
+    // ============================================================
+    //  SUGGESTION SYSTEM — context-aware follow-up questions
+    // ============================================================
+    const suggestionsDb = {
+      pizza: [
+        "What's the best pizza topping combination? 🍕",
+        "How do you make authentic Neapolitan pizza? 🔥",
+        "Compare different pizza styles (NY vs Chicago) 📊",
+        "What's the history of pizza Margherita? 🇮🇹",
+        "Best pizza restaurants in major cities 🗺️",
+        "How to make homemade pizza dough 👨‍🍳",
+      ],
+      basketball: [
+        "Who are the best NBA players right now? 🏆",
+        "Explain basketball rules for beginners ⚽",
+        "Compare legendary NBA teams and players 📊",
+        "What's the best basketball training routine? 💪",
+        "NBA playoffs winners by decade 📅",
+        "How to improve basketball shooting skills? 🎯",
+      ],
+      mario_kart: [
+        "What are the best Mario Kart 64 characters? 🏎️",
+        "How to win on each Mario Kart 64 track? 🏁",
+        "Mario Kart 64 cheats and shortcuts 🚀",
+        "Fastest strategies for Mario Kart 64 🎮",
+        "Best items to use in Mario Kart 64? 🎁",
+        "Mario Kart 64 vs modern Mario Kart games? 📈",
+      ],
+      general: [
+        "Tell me about pizza 🍕",
+        "Tell me about basketball 🏀",
+        "Tell me about Mario Kart 64 🏎️",
+      ],
+    };
+
+    const suggestionsContainer = document.getElementById('suggestions-container');
+    let lastTopic = 'general';
+
+    function detectTopic(text) {
+      const lower = text.toLowerCase();
+      if (lower.includes('pizza') || lower.includes('dough') || lower.includes('topping') || lower.includes('restaurant') || lower.includes('margherita')) {
+        return 'pizza';
+      }
+      if (lower.includes('basketball') || lower.includes('nba') || lower.includes('player') || lower.includes('shoot') || lower.includes('court')) {
+        return 'basketball';
+      }
+      if (lower.includes('mario kart') || lower.includes('n64') || lower.includes('track') || lower.includes('character') || lower.includes('kart 64')) {
+        return 'mario_kart';
+      }
+      return lastTopic;
+    }
+
+    function showSuggestions(topic = 'general') {
+      lastTopic = topic;
+      const suggestions = suggestionsDb[topic] || suggestionsDb['general'];
+      
+      // Shuffle and pick 3-4 random suggestions
+      const shuffled = [...suggestions].sort(() => Math.random() - 0.5);
+      const selected = shuffled.slice(0, Math.min(4, suggestions.length));
+
+      suggestionsContainer.innerHTML = '';
+      selected.forEach(suggestion => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'suggestion-btn';
+        btn.textContent = suggestion;
+        btn.onclick = (e) => {
+          e.preventDefault();
+          input.value = suggestion;
+          form.dispatchEvent(new Event('submit'));
+        };
+        suggestionsContainer.appendChild(btn);
+      });
+    }
+
     // ============================================================
     //  DEBUG LOGGER — shows everything in the on-page debug panel
     // ============================================================
@@ -326,10 +443,15 @@
                     model: data.model_used,
                     latency: data.latency_ms ?? elapsed,
                 });
+                // Show context-aware suggestions based on the user's message
+                const detectedTopic = detectTopic(msg);
+                showSuggestions(detectedTopic);
             } else {
                 dbg('dbg-error', `❌ HTTP ${res.status} — ${data.reply || rawText.slice(0, 200)}`);
                 setStatus(`error ${res.status}`, 'red');
                 appendMessage(`_Error (${res.status}): ${data.reply || 'Unknown server error.'}_`);
+                // Still show suggestions even on error
+                showSuggestions(detectTopic(msg));
             }
 
         } catch (err) {
@@ -354,6 +476,8 @@
     dbg('dbg-info', `Marked.js version: ${typeof marked !== 'undefined' ? (marked.version || 'loaded') : 'MISSING ⚠️'}`);
     setStatus('ready', 'green');
     appendMessage("🎉 Hey there! I'm your expert on:\n• **Pizza 🍕** (recipes, history, styles, toppings)\n• **Basketball 🏀** (NBA, rules, players, teams)\n• **Mario Kart 64 🏎️** (characters, tracks, strategies)\n\nAsk me anything about these topics!");
+    // Show initial suggestions
+    showSuggestions('general');
     </script>
 </body>
 </html>
