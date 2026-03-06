@@ -3,1056 +3,477 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Chat — Pizza, Basketball, Mario Kart</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Gemini Pro — Your AI Assistant</title>
+    <!-- Modern Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Markdown Parser -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
-        .chat-container { height: calc(100vh - 220px); }
-        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f5f9; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        /* Debug panel */
-        #debug-panel {
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
-            line-height: 1.45;
-            background: #1e1e1e;
-            color: #d4d4d4;
-            max-height: 260px;
-            overflow-y: auto;
-            transition: max-height 0.3s ease;
-        }
-        #debug-panel.collapsed { max-height: 0; padding: 0 12px; }
-        .dbg-info  { color: #569cd6; }
-        .dbg-ok    { color: #6a9955; }
-        .dbg-warn  { color: #dcdcaa; }
-        .dbg-error { color: #f44747; }
-        .dbg-net   { color: #ce9178; }
-        .dbg-time  { color: #808080; }
-        .dbg-json  { color: #9cdcfe; }
-
-        /* Enhanced message styling */
-        .msg-user {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-        .msg-ai {
-            background: white;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        :root {
+            --primary: #18181b; /* Zinc 900 */
+            --accent: #6366f1;  /* Indigo 500 */
+            --bg-main: #ffffff;
+            --bg-subtle: #fafafa;
+            --text-main: #09090b;
+            --text-muted: #71717a;
+            --border: #e4e4e7;
+            --radius: 0.75rem;
+            --shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
         }
 
-        /* Markdown table styling */
-        .msg-ai table {
-            border-collapse: collapse;
-            width: 100%;
-            margin: 12px 0;
-            font-size: 13px;
-        }
-        .msg-ai table th {
-            background: #f1f5f9;
-            padding: 8px 12px;
-            text-align: left;
-            font-weight: 600;
-            border: 1px solid #cbd5e1;
-            color: #0f172a;
-        }
-        .msg-ai table td {
-            padding: 8px 12px;
-            border: 1px solid #e2e8f0;
-        }
-        .msg-ai table tr:nth-child(even) {
-            background: #f8fafc;
-        }
-        .msg-ai table tr:hover {
-            background: #f1f5f9;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-        /* Markdown code styling */
-        .msg-ai code {
-            background: #f5f5f5;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            color: #d63384;
-        }
-        .msg-ai pre {
-            background: #2d2d2d;
-            color: #f8f8f2;
-            padding: 12px;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin: 8px 0;
-        }
-        .msg-ai pre code {
-            background: none;
-            color: #f8f8f2;
-            padding: 0;
-        }
-
-        /* Resend button */
-        .resend-btn {
-            display: inline-block;
-            margin-top: 8px;
-            padding: 4px 12px;
-            background: #e2e8f0;
-            border: none;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-            color: #475569;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .resend-btn:hover {
-            background: #cbd5e1;
-            color: #0f172a;
-            transform: scale(1.05);
-        }
-        .resend-btn:active {
-            transform: scale(0.95);
-        }
-
-        /* Suggestions */
-        #suggestions-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 12px;
-            padding: 8px 0;
-            border-top: 1px solid #e2e8f0;
-            padding-top: 8px;
-        }
-        .suggestion-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 6px 14px;
-            background: linear-gradient(135deg, #f0f4ff 0%, #fff0f6 100%);
-            border: 1px solid #cbd5e1;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 500;
-            color: #475569;
-            cursor: pointer;
-            transition: all 0.2s;
-            white-space: nowrap;
-        }
-        .suggestion-btn:hover {
-            border-color: #667eea;
-            background: linear-gradient(135deg, #e0e7ff 0%, #fdf2f8 100%);
-            color: #667eea;
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
-        }
-        .suggestion-btn:active {
-            transform: translateY(0);
-        }
-
-        /* Data Browser Panel */
-        #data-browser {
-            position: fixed;
-            right: 0;
-            top: 0;
-            width: 400px;
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
             height: 100vh;
-            background: white;
-            box-shadow: -2px 0 15px rgba(0, 0, 0, 0.1);
-            transform: translateX(400px);
-            transition: transform 0.3s ease;
-            z-index: 1000;
-            overflow-y: auto;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
         }
-        #data-browser.open {
-            transform: translateX(0);
-        }
-        #data-browser-header {
-            padding: 16px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+
+        /* Full Screen Layout */
+        .app-header {
+            background: white;
+            border-bottom: 1px solid var(--border);
+            padding: 0.75rem 2rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-shrink: 0;
+            z-index: 50;
         }
-        #data-browser-header h3 {
-            margin: 0;
-            font-size: 16px;
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            font-weight: 600;
+            font-size: 1.125rem;
+            letter-spacing: -0.02em;
+            color: var(--primary);
         }
-        #data-browser-close {
-            background: rgba(255, 255, 255, 0.3);
-            border: none;
-            color: white;
+
+        .actions { display: flex; gap: 0.75rem; align-items: center; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
             cursor: pointer;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 18px;
+            transition: all 0.15s ease;
+            border: 1px solid var(--border);
+            background: white;
+            color: var(--text-main);
         }
-        #data-browser-content {
+
+        .btn:hover { background: var(--bg-subtle); border-color: #d4d4d8; }
+        .btn-primary { background: var(--primary); color: white; border: none; }
+        .btn-primary:hover { background: #27272a; }
+        .btn-ghost { border: none; background: transparent; color: var(--text-muted); padding: 0.4rem; }
+        .btn-ghost:hover { background: var(--bg-subtle); color: var(--text-main); }
+
+        /* Status */
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #d4d4d8; }
+        .status-online .status-dot { background: #10b981; }
+
+        /* Full Screen Chat Area */
+        .chat-container {
             flex: 1;
             overflow-y: auto;
-            padding: 16px;
-        }
-        .table-list {
+            padding: 2rem 4rem;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 2rem;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            scrollbar-width: thin;
         }
-        .table-btn {
-            padding: 10px 12px;
-            background: #f1f5f9;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            cursor: pointer;
-            text-align: left;
+
+        .message {
+            display: flex;
+            flex-direction: column;
+            max-width: 90%;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .message-user { align-self: flex-end; }
+        .message-ai { align-self: flex-start; }
+
+        .bubble {
+            padding: 1.25rem 1.5rem;
+            border-radius: var(--radius);
+            font-size: 0.9375rem;
+            line-height: 1.6;
+        }
+
+        .message-user .bubble {
+            background: var(--primary);
+            color: white;
+            border-bottom-right-radius: 0;
+        }
+
+        .message-ai .bubble {
+            background: var(--bg-subtle);
+            color: var(--text-main);
+            border-bottom-left-radius: 0;
+            border: 1px solid var(--border);
+        }
+
+        .message-meta {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.625rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        /* Typography */
+        .prose strong { color: var(--primary); font-weight: 600; }
+        .prose p { margin-bottom: 1rem; }
+        .prose ul { margin: 1rem 0 1rem 1.5rem; }
+        .prose li { margin-bottom: 0.5rem; }
+        .prose table { border: 1px solid var(--border); border-radius: 0.5rem; overflow: hidden; margin: 1.5rem 0; }
+        .prose th { background: var(--bg-subtle); border-bottom: 1px solid var(--border); font-weight: 600; padding: 0.75rem; }
+        .prose td { border-bottom: 1px solid var(--border); padding: 0.75rem; }
+        .prose img { max-width: 300px; height: auto; border-radius: 0.5rem; margin: 1rem 0; }
+
+        /* Full Screen Footer */
+        .app-footer {
+            background: white;
+            border-top: 1px solid var(--border);
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .input-wrapper {
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .suggestions {
+            display: flex;
+            gap: 0.625rem;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .suggestion-chip {
+            white-space: nowrap;
+            padding: 0.4rem 0.9rem;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 2rem;
+            font-size: 0.8125rem;
             font-weight: 500;
-            color: #475569;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .suggestion-chip:hover { border-color: #a1a1aa; color: var(--text-main); background: var(--bg-subtle); }
+
+        .chat-form {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 1rem 1.5rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            background: var(--bg-subtle);
+            font-family: inherit;
+            font-size: 1rem;
+            outline: none;
             transition: all 0.2s;
         }
-        .table-btn:hover {
-            background: #e2e8f0;
-            border-color: #667eea;
-            color: #667eea;
+        .chat-input:focus {
+            border-color: #a1a1aa;
+            background: white;
+            box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.05);
         }
-        .table-btn.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-color: #667eea;
-        }
-        #data-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-        }
-        #data-table thead {
-            background: #f1f5f9;
-        }
-        #data-table th {
-            padding: 8px;
-            text-align: left;
-            border: 1px solid #cbd5e1;
-            font-weight: 600;
-        }
-        #data-table td {
-            padding: 8px;
-            border: 1px solid #e2e8f0;
-            word-break: break-word;
-            max-width: 100px;
-        }
-        #data-table tr:hover {
-            background: #f8fafc;
-        }
-        .data-search {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        .data-search input {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            font-size: 12px;
-        }
-        .data-search button {
-            padding: 6px 12px;
-            background: #667eea;
+
+        .send-btn {
+            padding: 0.875rem 1.5rem;
+            border-radius: var(--radius);
+            background: var(--primary);
             color: white;
             border: none;
-            border-radius: 6px;
             cursor: pointer;
-            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: opacity 0.2s;
+        }
+        .send-btn:hover { opacity: 0.9; }
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        #debug-panel {
+            background: #09090b;
+            color: #a1a1aa;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 11px;
+            padding: 1rem 2rem;
+            max-height: 250px;
+            overflow-y: auto;
+            border-top: 1px solid #27272a;
+            display: none;
         }
 
-        /* Emoji support */
-        .emoji { display: inline-block; }
+        @media (max-width: 768px) {
+            .chat-container { padding: 1rem; }
+            .app-header { padding: 0.75rem 1rem; }
+        }
     </style>
 </head>
-<body class="flex flex-col h-screen font-sans">
+<body>
 
-    <!-- HEADER -->
-    <header class="glass border-b-2 border-purple-200 p-4 sticky top-0 z-10 shadow-lg">
-        <div class="max-w-4xl mx-auto flex justify-between items-center gap-4">
-            <h1 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-600 to-red-600">
-              🏀♟️ Sports & Board Game Chat
-            </h1>
-            <div class="flex items-center gap-2">
-                <button id="new-btn" onclick="newConversation()" 
-                    class="text-xs font-mono bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 transition">
-                    ✨ New
-                </button>
-                <span id="status-badge" class="text-xs font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded-full">idle</span>
-                <button id="data-browser-toggle" onclick="toggleDataBrowser()"
-                    class="text-xs font-mono bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700 transition">
-                    📊 Data
-                </button>
-                <button id="debug-toggle" onclick="toggleDebug()"
-                    class="text-xs font-mono bg-gray-800 text-green-400 px-2 py-1 rounded hover:bg-gray-700 transition">
-                    🐛 Debug
-                </button>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="brand">
+            <i data-lucide="bot"></i>
+            <span>Gemini Pro</span>
+        </div>
+        
+        <div class="actions">
+            <div id="status-container" class="status-badge">
+                <div class="status-dot"></div>
+                <span id="status-text">Ready</span>
             </div>
+            <button class="btn btn-secondary" onclick="newConversation()">
+                <i data-lucide="plus" size="16"></i> New
+            </button>
+            <button class="btn btn-ghost" onclick="toggleDebug()">
+                <i data-lucide="terminal" size="16"></i>
+            </button>
         </div>
     </header>
 
-    <!-- LOAD PANEL (hidden) -->
-    <div id="load-panel" class="hidden bg-white border-b border-gray-200 p-4 max-h-48 overflow-y-auto" style="display:none;">
-        <div class="max-w-4xl mx-auto">
-            <h3 class="font-semibold mb-2">📂 Load Conversation (disabled)</h3>
-            <div id="conversations-list" class="space-y-2">
-                <p class="text-sm text-gray-500">Conversation saving is disabled. Use the 📊 Data button instead to browse and edit your Supabase tables.</p>
-            </div>
-        </div>
-    </div>
+    <!-- Debug Panel -->
+    <div id="debug-panel"></div>
 
-    <!-- DEBUG PANEL (collapsible) -->
-    <div id="debug-panel" class="px-3 py-2 border-b border-gray-700"></div>
+    <!-- Main Chat -->
+    <main id="chat-window" class="chat-container"></main>
 
-    <!-- CHAT WINDOW -->
-    <main id="chat-window" class="flex-1 overflow-y-auto p-6 space-y-4 chat-container max-w-4xl mx-auto w-full"></main>
-
-    <!-- DATA BROWSER PANEL (slide-in from right) -->
-    <div id="data-browser">
-        <div id="data-browser-header">
-            <h3>📊 Supabase Data Browser</h3>
-            <button id="data-browser-close" onclick="toggleDataBrowser()">✕</button>
-        </div>
-        <div id="data-browser-content">
-            <div id="table-list" class="table-list"></div>
-            <div id="table-view" style="display:none;">
-                <button onclick="backToTableList()" style="margin-bottom: 12px; padding: 8px 12px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer;">← Back</button>
-                <div class="data-search">
-                    <input type="text" id="search-input" placeholder="Search...">
-                    <button onclick="searchTable()">🔍 Search</button>
-                </div>
-                <table id="data-table"></table>
-                <div id="table-controls" style="margin-top: 12px;">
-                    <button onclick="newRecord()" style="padding: 8px 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer;">+ New Row</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- INPUT & SUGGESTIONS -->
-    <footer class="glass border-t-2 border-purple-200 p-4 sticky bottom-0 shadow-lg">
-        <div class="max-w-4xl mx-auto">
-            <!-- Suggestions -->
-            <div id="suggestions-container"></div>
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="input-wrapper">
+            <div id="suggestions-container" class="suggestions"></div>
             
-            <!-- Input form -->
-            <form id="chat-form" class="flex gap-3">
-                <input type="text" id="user-input" autocomplete="off" placeholder="Ask about any sport, any board game, or your Supabase data…"
-                    class="flex-1 p-3 border-2 border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 shadow-sm transition-all">
-                <button type="submit" id="send-btn"
-                    class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-2 rounded-2xl font-semibold hover:shadow-lg shadow-md transition-all transform hover:scale-105 active:scale-95">
-                    Send 🚀
+            <form id="chat-form" class="chat-form">
+                <input type="text" id="user-input" class="chat-input" autocomplete="off" 
+                    placeholder="Ask me anything...">
+                <button type="submit" id="send-btn" class="send-btn">
+                    <i data-lucide="send" size="20"></i>
                 </button>
             </form>
         </div>
     </footer>
 
     <script>
-    // ============================================================
-    //  SUPABASE INTEGRATION — Save/Load conversations
-    // ============================================================
-    let currentConversationId = generateUID();
-    let conversationMessages = [];  // [{role: 'user'|'ai', content: '', topic: ''}]
+        // Initialize Lucide Icons
+        lucide.createIcons();
 
-    const _ts = () => new Date().toISOString();
+        // State
+        const chatWindow = document.getElementById('chat-window');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const debugPanel = document.getElementById('debug-panel');
+        const statusText = document.getElementById('status-text');
+        const statusContainer = document.getElementById('status-container');
+        const suggestionsContainer = document.getElementById('suggestions-container');
 
-    function generateUID() {
-      return 'conv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
-    }
+        let userMessageHistory = []; 
+        let historyIndex = -1;
+        let lastUserMessage = '';
 
-    async function saveConversation(title = null) {
-      if (conversationMessages.length === 0) {
-        alert('No messages to save!');
-        return;
-      }
-
-      dbg('dbg-info', `💾 Saving conversation ${currentConversationId}...`);
-      try {
-        const res = await fetch('/api/storage?action=save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversationId: currentConversationId,
-            messages: conversationMessages,
-            topic: lastTopic,
-            title: title || `Chat ${new Date().toLocaleString()}`,
-          }),
-        });
-
-        const data = await res.json();
-        if (data.ok) {
-          dbg('dbg-ok', `✅ Conversation saved!`);
-          alert('✅ Conversation saved to Supabase!');
-        } else {
-          dbg('dbg-error', `❌ Save failed: ${data.error}`);
-          alert(`❌ Save failed: ${data.error}`);
-        }
-      } catch (err) {
-        dbg('dbg-error', `Save exception: ${err.message}`);
-        alert(`❌ Error: ${err.message}`);
-      }
-    }
-
-    async function loadConversations() {
-      dbg('dbg-info', `📂 Loading conversations...`);
-      try {
-        const res = await fetch('/api/storage?action=list', {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-
-        const data = await res.json();
-        if (!data.ok || !data.conversations) {
-          throw new Error(data.error || 'Unknown error');
-        }
-
-        dbg('dbg-ok', `✅ Loaded ${data.conversations.length} conversations`);
-        const listDiv = document.getElementById('conversations-list');
-        
-        if (data.conversations.length === 0) {
-          listDiv.innerHTML = '<p class="text-sm text-gray-500">No saved conversations yet.</p>';
-          return;
-        }
-
-        listDiv.innerHTML = data.conversations.map(conv => `
-          <div class="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100">
-            <div class="flex-1 min-w-0">
-              <p class="font-semibold text-sm truncate">${conv.title}</p>
-              <p class="text-xs text-gray-500">${conv.topic} • ${conv.messageCount} msg • ${new Date(conv.updatedAt).toLocaleString()}</p>
-            </div>
-            <button onclick="loadConversation('${conv.id}')" class="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">Load</button>
-            <button onclick="deleteConversation('${conv.id}')" class="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Delete</button>
-          </div>
-        `).join('');
-      } catch (err) {
-        dbg('dbg-error', `Load exception: ${err.message}`);
-        document.getElementById('conversations-list').innerHTML = `<p class="text-red-500 text-sm">Error: ${err.message}</p>`;
-      }
-    }
-
-    async function loadConversation(conversationId) {
-      dbg('dbg-info', `📂 Loading conversation ${conversationId}...`);
-      try {
-        const res = await fetch(`/api/storage?action=load&id=${conversationId}`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-
-        const data = await res.json();
-        if (!data.ok || !data.found) {
-          throw new Error(data.error || 'Conversation not found');
-        }
-
-        // Clear and reload
-        currentConversationId = data.conversationId;
-        conversationMessages = data.messages || [];
-        lastTopic = data.topic;
-        
-        chatWindow.innerHTML = ''; // Clear UI
-        conversationMessages.forEach(msg => {
-          appendMessage(msg.content, msg.role === 'user');
-        });
-
-        dbg('dbg-ok', `✅ Loaded conversation with ${conversationMessages.length} messages`);
-        document.getElementById('load-panel').classList.add('hidden');
-        alert(`✅ Loaded "${data.title}"!`);
-      } catch (err) {
-        dbg('dbg-error', `Load exception: ${err.message}`);
-        alert(`❌ Error: ${err.message}`);
-      }
-    }
-
-    async function deleteConversation(conversationId) {
-      if (!confirm('Delete this conversation?')) return;
-
-      dbg('dbg-info', `🗑️ Deleting conversation ${conversationId}...`);
-      try {
-        const res = await fetch(`/api/storage?action=delete&id=${conversationId}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-        });
-
-        const data = await res.json();
-        if (data.ok) {
-          dbg('dbg-ok', `✅ Deleted!`);
-          loadConversations(); // Refresh list
-        } else {
-          throw new Error(data.error || 'Delete failed');
-        }
-      } catch (err) {
-        dbg('dbg-error', `Delete exception: ${err.message}`);
-        alert(`❌ Error: ${err.message}`);
-      }
-    }
-
-    function toggleLoadPanel() {
-      const panel = document.getElementById('load-panel');
-      panel.classList.toggle('hidden');
-      if (!panel.classList.contains('hidden')) {
-        loadConversations();
-      }
-    }
-
-    function newConversation() {
-      currentConversationId = generateUID();
-      conversationMessages = [];
-      chatWindow.innerHTML = '';
-      appendMessage("🎉 Hey there! I'm your expert on:\n• **Pizza 🍕** (recipes, history, styles, toppings)\n• **Basketball 🏀** (NBA, rules, players, teams)\n• **Mario Kart 64 🏎️** (characters, tracks, strategies)\n\nAsk me anything about these topics!");
-      showSuggestions('general');
-      document.getElementById('load-panel').classList.add('hidden');
-      dbg('dbg-info', `✨ New conversation started: ${currentConversationId}`);
-    }
-
-    // ============================================================
-    //  SUGGESTION SYSTEM — context-aware follow-up questions
-    // ============================================================
-    const suggestionsDb = {
-      pizza: [
-        "What's the best pizza topping combination? 🍕",
-        "How do you make authentic Neapolitan pizza? 🔥",
-        "Compare different pizza styles (NY vs Chicago) 📊",
-        "What's the history of pizza Margherita? 🇮🇹",
-        "Best pizza restaurants in major cities 🗺️",
-        "How to make homemade pizza dough 👨‍🍳",
-      ],
-      basketball: [
-        "Who are the best NBA players right now? 🏆",
-        "Explain basketball rules for beginners ⚽",
-        "Compare legendary NBA teams and players 📊",
-        "What's the best basketball training routine? 💪",
-        "NBA playoffs winners by decade 📅",
-        "How to improve basketball shooting skills? 🎯",
-      ],
-      mario_kart: [
-        "What are the best Mario Kart 64 characters? 🏎️",
-        "How to win on each Mario Kart 64 track? 🏁",
-        "Mario Kart 64 cheats and shortcuts 🚀",
-        "Fastest strategies for Mario Kart 64 🎮",
-        "Best items to use in Mario Kart 64? 🎁",
-        "Mario Kart 64 vs modern Mario Kart games? 📈",
-      ],
-      general: [
-        "Tell me about pizza 🍕",
-        "Tell me about basketball 🏀",
-        "Tell me about Mario Kart 64 🏎️",
-      ],
-    };
-
-    const suggestionsContainer = document.getElementById('suggestions-container');
-    let lastTopic = 'general';
-
-    function detectTopic(text) {
-      const lower = text.toLowerCase();
-      if (lower.includes('pizza') || lower.includes('dough') || lower.includes('topping') || lower.includes('restaurant') || lower.includes('margherita')) {
-        return 'pizza';
-      }
-      if (lower.includes('basketball') || lower.includes('nba') || lower.includes('player') || lower.includes('shoot') || lower.includes('court')) {
-        return 'basketball';
-      }
-      if (lower.includes('mario kart') || lower.includes('n64') || lower.includes('track') || lower.includes('character') || lower.includes('kart 64')) {
-        return 'mario_kart';
-      }
-      return lastTopic;
-    }
-
-    function showSuggestions(topic = 'general') {
-      lastTopic = topic;
-      const suggestions = suggestionsDb[topic] || suggestionsDb['general'];
-      
-      // Shuffle and pick 3-4 random suggestions
-      const shuffled = [...suggestions].sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, Math.min(4, suggestions.length));
-
-      suggestionsContainer.innerHTML = '';
-      selected.forEach(suggestion => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'suggestion-btn';
-        btn.textContent = suggestion;
-        btn.onclick = (e) => {
-          e.preventDefault();
-          input.value = suggestion;
-          form.dispatchEvent(new Event('submit'));
+        const suggestionsDb = {
+            general: ["Explain Quantum Physics ⚛️", "Write a short story ✍️", "How to bake a cake 🎂", "Help me with code 💻"]
         };
-        suggestionsContainer.appendChild(btn);
-      });
-    }
 
-    // ============================================================
-    //  SUPABASE DATA BROWSER — CRUD operations
-    // ============================================================
-    let currentTable = null;
-    let dataBrowserOpen = false;
-
-    function toggleDataBrowser() {
-      dataBrowserOpen = !dataBrowserOpen;
-      document.getElementById('data-browser').classList.toggle('open', dataBrowserOpen);
-      if (dataBrowserOpen) {
-        loadTableList();
-      }
-    }
-
-    async function loadTableList() {
-      try {
-        const res = await fetch('/api/supabase', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'LIST_TABLES' }),
-        });
-        
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        
-        const data = await res.json();
-        
-        if (!data.ok || !data.tables) {
-          throw new Error(data.error || 'Failed to load tables');
-        }
-        
-        const listEl = document.getElementById('table-list');
-        
-        if (data.tables.length === 0) {
-          listEl.innerHTML = `
-            <h4 style="margin: 0 0 8px 0; font-size: 13px; color: #475569; font-weight: 600;">📋 No Tables Found</h4>
-            <p style="font-size: 11px; color: #6b7280; margin: 0 0 12px 0; line-height: 1.5;">
-              To auto-discover your tables, set the <code style="background: #f3f4f6; padding: 2px 4px; border-radius: 2px;">SUPABASE_TABLES</code> environment variable in Vercel:
-            </p>
-            <p style="font-size: 11px; color: #1f2937; background: #f9fafb; padding: 8px; border-radius: 4px; margin: 0 0 12px 0; font-family: monospace;">
-              SUPABASE_TABLES=users,products,orders
-            </p>
-            <p style="font-size: 11px; color: #6b7280; margin: 0 0 10px 0;">Or enter table name manually:</p>
-            <input type="text" id="manual-table-input" placeholder="e.g., users, products, orders" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; box-sizing: border-box;">
-            <button onclick="loadTabDataManual()" style="width: 100%; padding: 6px 12px; margin-top: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">Load Table</button>
-          `;
-          return;
-        }
-        
-        listEl.innerHTML = '<h4 style="margin: 0 0 8px 0; font-size: 13px; color: #475569; font-weight: 600;">📋 Your Tables:</h4>';
-        data.tables.forEach(table => {
-          const btn = document.createElement('button');
-          btn.className = 'table-btn';
-          btn.textContent = table;
-          btn.style.cursor = 'pointer';
-          btn.onclick = () => loadTabData(table);
-          listEl.appendChild(btn);
-        });
-      } catch (err) {
-        console.error('Failed to load tables:', err);
-        const listEl = document.getElementById('table-list');
-        listEl.innerHTML = `
-          <h4 style="color: #ef4444; margin: 0 0 8px 0; font-weight: 600;">⚠️ Error Loading Tables</h4>
-          <p style="font-size: 11px; color: #6b7280; margin: 0 0 10px 0;">To see ALL tables, add to Vercel environment variables:</p>
-          <p style="font-size: 11px; color: #1f2937; background: #f9fafb; padding: 8px; border-radius: 4px; margin: 0 0 12px 0; font-family: monospace;">
-            SUPABASE_TABLES=table1,table2,table3
-          </p>
-          <p style="font-size: 11px; color: #6b7280; margin: 0 0 10px 0;">Or enter table name manually:</p>
-          <input type="text" id="manual-table-input" placeholder="e.g., users" style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; box-sizing: border-box;">
-          <button onclick="loadTabDataManual()" style="width: 100%; padding: 6px 12px; margin-top: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;">Load Table</button>
-        `;
-      }
-    }
-
-    function loadTabDataManual() {
-      const input = document.getElementById('manual-table-input');
-      if (input && input.value.trim()) {
-        loadTabData(input.value.trim());
-      }
-    }
-
-    async function loadTabData(table) {
-      currentTable = table;
-      try {
-        const res = await fetch('/api/supabase', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'READ', table, limit: 100 }),
-        });
-        
-        const data = await res.json();
-        
-        if (!data.ok) {
-          alert(`❌ Error: ${data.error}`);
-          console.error('Load table error:', data.error);
-          return;
-        }
-        
-        if (data.rows && data.rows.length > 0) {
-          displayTableData(table, data.rows);
-          document.getElementById('table-list').parentElement.style.display = 'none';
-          document.getElementById('table-view').style.display = 'block';
-        } else {
-          alert(`✓ Table "${table}" loaded but is empty or does not exist.`);
-        }
-      } catch (err) {
-        alert(`❌ Network error: ${err.message}`);
-        console.error('Failed to load table data:', err);
-      }
-    }
-
-    function displayTableData(table, rows) {
-      if (!rows || rows.length === 0) return;
-      const thead = document.createElement('thead');
-      const headerRow = document.createElement('tr');
-      Object.keys(rows[0]).forEach(col => {
-        const th = document.createElement('th');
-        th.textContent = col;
-        headerRow.appendChild(th);
-      });
-      const delTh = document.createElement('th');
-      delTh.textContent = 'Actions';
-      headerRow.appendChild(delTh);
-      thead.appendChild(headerRow);
-
-      const tbody = document.createElement('tbody');
-      rows.forEach(row => {
-        const tr = document.createElement('tr');
-        Object.values(row).forEach(val => {
-          const td = document.createElement('td');
-          td.textContent = JSON.stringify(val).slice(0, 50);
-          tr.appendChild(td);
-        });
-        const actionsTd = document.createElement('td');
-        const id = row.id || Object.values(row)[0];
-        actionsTd.innerHTML = `<button onclick="deleteRecord('${currentTable}', '${id}')" style="padding: 4px 8px; background: #ef4444; color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 11px;">Delete</button>`;
-        tr.appendChild(actionsTd);
-        tbody.appendChild(tr);
-      });
-
-      const tableEl = document.getElementById('data-table');
-      tableEl.innerHTML = '';
-      tableEl.appendChild(thead);
-      tableEl.appendChild(tbody);
-    }
-
-    async function searchTable() {
-      const searchVal = document.getElementById('search-input').value;
-      if (!currentTable || !searchVal) return;
-      try {
-        const res = await fetch('/api/supabase', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'SEARCH', table: currentTable, query: { name: searchVal }, limit: 50 }),
-        });
-        const data = await res.json();
-        if (data.ok && data.rows) {
-          displayTableData(currentTable, data.rows);
-        }
-      } catch (err) {
-        console.error('Search failed:', err);
-      }
-    }
-
-    async function deleteRecord(table, id) {
-      if (!confirm(`Delete record ${id}?`)) return;
-      try {
-        const res = await fetch('/api/supabase', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'DELETE', table, id }),
-        });
-        const data = await res.json();
-        if (data.ok) {
-          loadTabData(table);  // reload
-        }
-      } catch (err) {
-        console.error('Delete failed:', err);
-      }
-    }
-
-    function newRecord() {
-      alert('Quick create: Send message like: "CREATE in ' + currentTable + ' with name=value"');
-    }
-
-    function backToTableList() {
-      document.getElementById('table-list').parentElement.style.display = 'block';
-      document.getElementById('table-view').style.display = 'none';
-      currentTable = null;
-    }
-
-    // ============================================================
-    //  DEBUG LOGGER — shows everything in the on-page debug panel
-    // ============================================================
-    const debugPanel = document.getElementById('debug-panel');
-    const statusBadge = document.getElementById('status-badge');
-    let debugVisible = true;
-    let requestCounter = 0;
-    let lastUserMessage = '';  // Store for resending
-
-    function toggleDebug() {
-        debugVisible = !debugVisible;
-        debugPanel.classList.toggle('collapsed', !debugVisible);
-        document.getElementById('debug-toggle').textContent = debugVisible ? '🐛 Debug' : '🐛 Show';
-    }
-
-    function dbg(cls, ...parts) {
-        const ts = new Date().toISOString().slice(11, 23);
-        const line = document.createElement('div');
-        line.innerHTML = `<span class="dbg-time">[${ts}]</span> <span class="${cls}">${parts.join(' ')}</span>`;
-        debugPanel.appendChild(line);
-        debugPanel.scrollTop = debugPanel.scrollHeight;
-
-        const plain = `[${ts}] ${parts.join(' ')}`;
-        if (cls === 'dbg-error') console.error(plain);
-        else if (cls === 'dbg-warn') console.warn(plain);
-        else console.log(`%c${plain}`, cls === 'dbg-ok' ? 'color:green' : cls === 'dbg-net' ? 'color:orange' : 'color:deepskyblue');
-    }
-
-    function setStatus(text, color = 'gray') {
-        statusBadge.textContent = text;
-        statusBadge.className = `text-xs font-mono px-2 py-1 rounded-full bg-${color}-100 text-${color}-700`;
-    }
-
-    // ============================================================
-    //  CHAT UI
-    // ============================================================
-    const form = document.getElementById('chat-form');
-    const input = document.getElementById('user-input');
-    const chatWindow = document.getElementById('chat-window');
-    const btn = document.getElementById('send-btn');
-
-    function escapeHtml(s) {
-        const d = document.createElement('div');
-        d.textContent = s;
-        return d.innerHTML;
-    }
-
-    function sendMessage(msg) {
-        input.value = msg;
-        form.dispatchEvent(new Event('submit'));
-    }
-
-    function appendMessage(text, isUser = false, meta = {}) {
-        const wrapper = document.createElement('div');
-        wrapper.className = isUser ? 'flex justify-end' : 'flex justify-start';
-
-        const div = document.createElement('div');
-        div.className = isUser
-            ? 'msg-user text-white p-4 rounded-3xl rounded-tr-none shadow-lg max-w-[85%] break-words'
-            : 'msg-ai p-4 rounded-3xl rounded-tl-none max-w-[85%] text-gray-800 prose prose-sm max-w-none';
-
-        // Parse markdown for AI responses
-        let html = isUser ? escapeHtml(text) : marked.parse(text);
-        
-        // Add emoji support for common topics
-        if (!isUser) {
-            html = html
-                .replace(/pizza/gi, '🍕 $&')
-                .replace(/basketball/gi, '🏀 $&')
-                .replace(/mario ?kart/gi, '🏎️ $&')
-                .replace(/nba/gi, '🏀 $&')
-                .replace(/nfl/gi, '🏈 $&');
-        }
-        
-        div.innerHTML = html;
-
-        // Show model badge + resend button under AI messages
-        if (!isUser && meta.model) {
-            const footer = document.createElement('div');
-            footer.className = 'mt-3 flex items-center justify-between';
-            
-            const badge = document.createElement('div');
-            badge.className = 'text-[10px] font-mono text-gray-500';
-            badge.textContent = `💫 ${meta.model}  •  ${meta.latency ?? '?'}ms`;
-            
-            const resendBtn = document.createElement('button');
-            resendBtn.className = 'resend-btn';
-            resendBtn.textContent = '↩️ Resend';
-            resendBtn.onclick = (e) => {
-                e.preventDefault();
-                if (lastUserMessage) {
-                    sendMessage(lastUserMessage);
-                }
-            };
-            
-            footer.appendChild(badge);
-            footer.appendChild(resendBtn);
-            div.appendChild(footer);
+        function setStatus(text, type = 'idle') {
+            statusText.textContent = text;
+            statusContainer.className = `status-badge ${type === 'busy' ? 'status-online' : ''}`;
+            if (type === 'error') statusContainer.style.background = '#fee2e2';
+            else statusContainer.style.background = '#f1f5f9';
         }
 
-        wrapper.appendChild(div);
-        chatWindow.appendChild(wrapper);
-        chatWindow.scrollTop = chatWindow.scrollHeight;
-    }
+        function dbg(type, ...parts) {
+            const entry = document.createElement('div');
+            entry.className = `dbg-entry dbg-${type}`;
+            const ts = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            entry.innerHTML = `<span style="opacity: 0.5;">[${ts}]</span> ${parts.join(' ')}`;
+            debugPanel.appendChild(entry);
+            debugPanel.scrollTop = debugPanel.scrollHeight;
+        }
 
-    // ============================================================
-    //  FORM SUBMIT — with full debug instrumentation
-    // ============================================================
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-        const msg = input.value.trim();
-        if (!msg) return;
+        function toggleDebug() {
+            debugPanel.style.display = debugPanel.style.display === 'block' ? 'none' : 'block';
+        }
 
-        lastUserMessage = msg;  // Save for resend
-        requestCounter++;
-        const rid = requestCounter;
-        dbg('dbg-info', `━━━ REQUEST #${rid} ━━━━━━━━━━━━━━━━━━━━━━━━`);
-        dbg('dbg-info', `User message (${msg.length} chars): "${msg.length > 100 ? msg.slice(0, 100) + '…' : msg}"`);
-
-        // Add to conversation history
-        conversationMessages.push({ role: 'user', content: msg, timestamp: _ts() });
-
-        appendMessage(msg, true);
-        input.value = '';
-        btn.disabled = true;
-        btn.innerText = '⏳';
-        setStatus('thinking…', 'yellow');
-
-        const payload = JSON.stringify({ message: msg });
-        dbg('dbg-net', `POST /api/chat  payload=${payload.length} bytes`);
-
-        const t0 = performance.now();
-        try {
-            const res = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: payload,
+        function showSuggestions() {
+            suggestionsContainer.innerHTML = '';
+            suggestionsDb.general.forEach(text => {
+                const chip = document.createElement('div');
+                chip.className = 'suggestion-chip';
+                chip.textContent = text;
+                chip.onclick = () => {
+                    userInput.value = text;
+                    chatForm.dispatchEvent(new Event('submit'));
+                };
+                suggestionsContainer.appendChild(chip);
             });
-            const elapsed = Math.round(performance.now() - t0);
-            dbg('dbg-net', `Response: HTTP ${res.status} ${res.statusText}  (${elapsed}ms round-trip)`);
-
-            res.headers.forEach((v, k) => dbg('dbg-json', `  header  ${k}: ${v}`));
-
-            let data;
-            const rawText = await res.text();
-            dbg('dbg-json', `Raw body (${rawText.length} chars): ${rawText.slice(0, 400)}${rawText.length > 400 ? '…' : ''}`);
-
-            try {
-                data = JSON.parse(rawText);
-            } catch (jsonErr) {
-                dbg('dbg-error', `JSON parse failed: ${jsonErr.message}`);
-                appendMessage(`_Error: server returned non-JSON response (HTTP ${res.status})._`);
-                setStatus('JSON error', 'red');
-                return;
-            }
-
-            if (data.debug && Array.isArray(data.debug)) {
-                dbg('dbg-info', `Server debug trail (${data.debug.length} entries):`);
-                data.debug.forEach((d, i) => {
-                    dbg('dbg-json', `  [${i}] ${JSON.stringify(d)}`);
-                });
-            }
-
-            if (res.ok) {
-                dbg('dbg-ok', `✅ Reply OK  model=${data.model_used || '?'}  reply_len=${(data.reply||'').length}  latency=${data.latency_ms ?? elapsed}ms`);
-                setStatus(`✓ ${data.model_used || 'ok'}`, 'green');
-                
-                let reply = data.reply || '(empty reply)';
-                
-                // Check for Supabase CRUD JSON blocks in response
-                const jsonBlockRegex = /```json\s*(\{[\s\S]*?\})\s*```/;
-                const jsonMatch = reply.match(jsonBlockRegex);
-                
-                if (jsonMatch) {
-                  try {
-                    const crudOp = JSON.parse(jsonMatch[1]);
-                    dbg('dbg-info', `🗄️ Detected CRUD operation:`, JSON.stringify(crudOp));
-                    
-                    // Remove the JSON block from the display
-                    reply = reply.replace(jsonBlockRegex, '').trim();
-                    
-                    // Execute the CRUD operation
-                    const crudRes = await fetch('/api/supabase', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(crudOp),
-                    });
-                    
-                    const crudData = await crudRes.json();
-                    
-                    if (crudData.ok) {
-                      dbg('dbg-ok', `✅ CRUD Success: ${crudOp.action} on ${crudOp.table}`);
-
-                      // Append results to reply in a markdown table for readability
-                      if (crudData.rows && crudData.rows.length > 0) {
-                        const rows = crudData.rows;
-                        const cols = Object.keys(rows[0] || {});
-
-                        if (cols.length > 0) {
-                          const header = `| ${cols.join(' | ')} |`;
-                          const sep = `| ${cols.map(() => '---').join(' | ')} |`;
-                          const body = rows
-                            .slice(0, 50) // safety limit
-                            .map(r => `| ${cols.map(c => {
-                              const v = r[c];
-                              if (v === null || v === undefined) return '';
-                              const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
-                              return s.replace(/\n/g, ' ').slice(0, 80);
-                            }).join(' | ')} |`)
-                            .join('\n');
-
-                          reply += `\n\n**📊 Results (first ${Math.min(rows.length, 50)} rows):**\n${header}\n${sep}\n${body}`;
-                        } else {
-                          reply += `\n\n**📊 Results:** (no columns found)`;
-                        }
-                      } else if (crudOp.action === 'DELETE' || crudOp.action === 'UPDATE' || crudOp.action === 'CREATE') {
-                        reply += `\n\n**✅ Operation completed successfully!**`;
-                      }
-                    } else {
-                      dbg('dbg-error', `❌ CRUD Failed: ${crudData.error}`);
-                      reply += `\n\n**❌ Database Error:** ${crudData.error}`;
-                    }
-                  } catch (crudErr) {
-                    dbg('dbg-warn', `CRUD execution error: ${crudErr.message}`);
-                  }
-                }
-                
-                // Add AI response to conversation history
-                conversationMessages.push({ role: 'ai', content: reply, model: data.model_used, timestamp: _ts() });
-                
-                appendMessage(reply, false, {
-                    model: data.model_used,
-                    latency: data.latency_ms ?? elapsed,
-                });
-                
-                // Note: conversation auto-save disabled — use Data browser for your own table CRUD
-                
-                // Show context-aware suggestions based on the user's message
-                const detectedTopic = detectTopic(msg);
-                showSuggestions(detectedTopic);
-            } else {
-                dbg('dbg-error', `❌ HTTP ${res.status} — ${data.reply || rawText.slice(0, 200)}`);
-                setStatus(`error ${res.status}`, 'red');
-                const errMsg = `_Error (${res.status}): ${data.reply || 'Unknown server error.'}_`;
-                appendMessage(errMsg);
-                // Still show suggestions even on error
-                showSuggestions(detectTopic(msg));
-            }
-
-        } catch (err) {
-            const elapsed = Math.round(performance.now() - t0);
-            dbg('dbg-error', `🔥 Network/fetch exception after ${elapsed}ms: ${err.message}`);
-            dbg('dbg-error', `Stack: ${err.stack}`);
-            setStatus('network error', 'red');
-            appendMessage('_Error: Could not connect to AI server. Check the debug panel for details._');
-        } finally {
-            btn.disabled = false;
-            btn.innerText = 'Send 🚀';
-            dbg('dbg-info', `━━━ END REQUEST #${rid} ━━━━━━━━━━━━━━━━━━━━`);
         }
-    };
 
-    // ============================================================
-    //  STARTUP
-    // ============================================================
-    dbg('dbg-ok', '🚀 Chat app loaded');
-    dbg('dbg-info', `User-Agent: ${navigator.userAgent}`);
-    dbg('dbg-info', `Location: ${location.href}`);
-    dbg('dbg-info', `Marked.js version: ${typeof marked !== 'undefined' ? (marked.version || 'loaded') : 'MISSING ⚠️'}`);
-    setStatus('ready', 'green');
-    appendMessage("🎉 Hey there! I'm your expert on:\n• **Pizza 🍕** (recipes, history, styles, toppings)\n• **Basketball 🏀** (NBA, rules, players, teams)\n• **Mario Kart 64 🏎️** (characters, tracks, strategies)\n\nAsk me anything about these topics!");
-    // Show initial suggestions
-    showSuggestions('general');
+        function appendMessage(text, isUser = false, meta = {}) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${isUser ? 'message-user' : 'message-ai'}`;
+
+            const bubble = document.createElement('div');
+            bubble.className = `bubble ${!isUser ? 'prose' : ''}`;
+            
+            // Cleanup redundant whitespace
+            const cleanText = text.replace(/\n{3,}/g, '\n\n').trim();
+            bubble.innerHTML = isUser ? cleanText : marked.parse(cleanText);
+
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'message-meta';
+            
+            if (isUser) {
+                metaDiv.innerHTML = `
+                    <span>You</span>
+                    <button class="btn-ghost" style="padding:0; font-size:10px; cursor:pointer" onclick="sendMessage('${text.replace(/'/g, "\\'")}')">
+                        <i data-lucide="rotate-ccw" size="10"></i> Resend
+                    </button>
+                `;
+            } else {
+                metaDiv.innerHTML = `
+                    <span><i data-lucide="sparkles" size="10"></i> ${meta.model || 'Gemini'}</span>
+                    <span>${meta.latency ? meta.latency + 'ms' : ''}</span>
+                    <button class="btn-ghost" style="padding:0; font-size:10px; cursor:pointer" onclick="resendLast()">Resend</button>
+                `;
+            }
+
+            msgDiv.appendChild(bubble);
+            msgDiv.appendChild(metaDiv);
+            chatWindow.appendChild(msgDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            lucide.createIcons();
+        }
+
+        function sendMessage(msg) {
+            userInput.value = msg;
+            chatForm.dispatchEvent(new Event('submit'));
+        }
+
+        function resendLast() {
+            if (lastUserMessage) sendMessage(lastUserMessage);
+        }
+
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (userMessageHistory.length > 0) {
+                    historyIndex = (historyIndex === -1) ? userMessageHistory.length - 1 : Math.max(0, historyIndex - 1);
+                    userInput.value = userMessageHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex !== -1) {
+                    historyIndex++;
+                    if (historyIndex >= userMessageHistory.length) {
+                        historyIndex = -1;
+                        userInput.value = '';
+                    } else {
+                        userInput.value = userMessageHistory[historyIndex];
+                    }
+                }
+            }
+        });
+
+        function newConversation() {
+            chatWindow.innerHTML = '';
+            userMessageHistory = [];
+            historyIndex = -1;
+            appendMessage("Hello! I am your AI assistant. I can help with coding, writing, research, or just general chat. What's on your mind?");
+            showSuggestions();
+        }
+
+        chatForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const msg = userInput.value.trim();
+            if (!msg) return;
+
+            if (userMessageHistory[userMessageHistory.length - 1] !== msg) userMessageHistory.push(msg);
+            historyIndex = -1;
+            lastUserMessage = msg;
+            
+            appendMessage(msg, true);
+            userInput.value = '';
+            sendBtn.disabled = true;
+            setStatus('Thinking...', 'busy');
+            dbg('info', `Sending request: ${msg.slice(0, 50)}...`);
+
+            const t0 = performance.now();
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg })
+                });
+
+                const data = await res.json();
+                const latency = Math.round(performance.now() - t0);
+
+                if (res.ok) {
+                    appendMessage(data.reply, false, { model: data.model_used, latency });
+                    setStatus('Ready');
+                } else {
+                    throw new Error(data.reply || 'Server error');
+                }
+            } catch (err) {
+                dbg('error', err.message);
+                appendMessage(`_Error: ${err.message}_`);
+                setStatus('Error', 'error');
+            } finally {
+                sendBtn.disabled = false;
+            }
+        };
+
+        newConversation();
     </script>
 </body>
 </html>
