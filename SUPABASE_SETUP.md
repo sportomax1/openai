@@ -15,10 +15,14 @@ In Vercel Dashboard → your project → Settings → Environment Variables, add
 ```
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key-here
-SUPABASE_TABLES=table1,table2,table3
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here   # optional but recommended for auto-discovery
+SUPABASE_TABLES=table1,table2,table3                    # optional explicit list
 ```
 
-**SUPABASE_TABLES** — comma-separated list of your table names. This enables auto-discovery in the data browser. Example:
+- **SUPABASE_SERVICE_ROLE_KEY** (recommended): allows the backend (server-only) to auto-discover ALL public tables via `pg_tables` and perform full CRUD. Never expose this key to the frontend.
+- **SUPABASE_TABLES** (optional): comma-separated list of your table names. When set, it overrides auto-discovery and is used for the table list in the UI and in the chat system prompt.
+
+Examples:
 ```
 SUPABASE_TABLES=users,products,orders,invoices
 ```

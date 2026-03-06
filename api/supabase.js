@@ -30,13 +30,14 @@ export default async function handler(req) {
 
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
 
-    if (!supabaseUrl || !supabaseKey) {
+    if (!supabaseUrl || !supabaseServiceKey) {
       log.error(`[${rid}] Missing Supabase credentials`);
       return new Response(JSON.stringify({
         ok: false,
-        error: 'Supabase credentials not configured (SUPABASE_URL, SUPABASE_ANON_KEY)',
+        error: 'Supabase credentials not configured (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY)',
       }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -48,10 +49,9 @@ export default async function handler(req) {
     // ── LIST ALL TABLES ──
     if (action === 'LIST_TABLES') {
       log.info(`[${rid}] Listing tables`);
-      
-      // Check for SUPABASE_TABLES environment variable (comma-separated list)
+
+      // 1) Prefer SUPABASE_TABLES env for explicit control
       const tablesEnv = process.env.SUPABASE_TABLES;
-      
       if (tablesEnv) {
         const tables = tablesEnv.split(',').map(t => t.trim()).filter(Boolean);
         log.ok(`[${rid}] Found ${tables.length} tables from SUPABASE_TABLES env`);
@@ -59,37 +59,46 @@ export default async function handler(req) {
           headers: { 'Content-Type': 'application/json' }
         });
       }
-      
-      // Try REST API as fallback (may not work with anon key)
+
+      // 2) Auto-discover tables via pg_tables using service-role key
       try {
-        const url = `${supabaseUrl}/rest/v1/information_schema.tables?select=table_name&table_schema=eq.public&order=table_name.asc`;
+        const url = `${supabaseUrl}/rest/v1/pg_tables?select=schemaname,tablename&schemaname=eq.public&order=tablename.asc`;
+        log.debug(`[${rid}] Auto-discovering tables via ${url}`);
+
         const res = await fetch(url, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${supabaseKey}`,
+            'Authorization': `Bearer ${supabaseServiceKey}`,
             'Accept': 'application/json',
-            'apikey': supabaseKey,
+            'apikey': supabaseServiceKey,
           },
         });
-        
+
         if (res.ok) {
-          const tables = await res.json();
-          const tableNames = Array.isArray(tables) ? tables.map(t => t.table_name).filter(Boolean) : [];
-          log.ok(`[${rid}] Found ${tableNames.length} tables via REST API`);
+          const rows = await res.json();
+          const tableNames = Array.isArray(rows)
+            ? rows
+                .filter(r => r.schemaname === 'public' && r.tablename)
+                .map(r => r.tablename)
+            : [];
+          log.ok(`[${rid}] Auto-discovery found ${tableNames.length} tables`);
           return new Response(JSON.stringify({ ok: true, tables: tableNames }), {
             headers: { 'Content-Type': 'application/json' }
           });
+        } else {
+          const errText = await res.text();
+          log.warn(`[${rid}] pg_tables query failed (${res.status}): ${errText.slice(0, 200)}`);
         }
       } catch (err) {
-        log.debug(`[${rid}] REST API query failed: ${err.message}`);
+        log.warn(`[${rid}] Auto-discovery via pg_tables failed: ${err.message}`);
       }
-      
-      // Fallback: return instructions
+
+      // 3) Fallback: return instructions
       log.warn(`[${rid}] Table discovery failed - set SUPABASE_TABLES env var`);
       return new Response(JSON.stringify({
         ok: true,
         tables: [],
-        message: 'Set SUPABASE_TABLES env var (comma-separated) or enter table name manually'
+        message: 'Set SUPABASE_TABLES env var (comma-separated) so the app can list your tables.',
       }), { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -127,9 +136,9 @@ export default async function handler(req) {
       log.info(`[${rid}] READ ${table} with query:`, query);
       const res = await fetch(queryStr, {
         headers: { 
-          'Authorization': `Bearer ${supabaseKey}`, 
+          'Authorization': `Bearer ${supabaseServiceKey}`, 
           'Accept': 'application/json',
-          'apikey': supabaseKey,
+          'apikey': supabaseServiceKey,
         },
       });
       
@@ -166,7 +175,7 @@ export default async function handler(req) {
       const res = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
+          'Authorization': `Bearer ${supabaseServiceKey}`,
           'Content-Type': 'application/json',
           'Prefer': 'return=representation',
         },
@@ -194,7 +203,7 @@ export default async function handler(req) {
       const res = await fetch(`${supabaseUrl}/rest/v1/${table}?id=eq.${id}`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
+          'Authorization': `Bearer ${supabaseServiceKey}`,
           'Content-Type': 'application/json',
           'Prefer': 'return=representation',
         },
@@ -222,7 +231,7 @@ export default async function handler(req) {
       const res = await fetch(`${supabaseUrl}/rest/v1/${table}?id=eq.${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
+          'Authorization': `Bearer ${supabaseServiceKey}`,
           'Prefer': 'return=representation',
         },
       });

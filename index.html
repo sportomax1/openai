@@ -972,9 +972,29 @@
                     
                     if (crudData.ok) {
                       dbg('dbg-ok', `✅ CRUD Success: ${crudOp.action} on ${crudOp.table}`);
-                      // Append results to reply
+
+                      // Append results to reply in a markdown table for readability
                       if (crudData.rows && crudData.rows.length > 0) {
-                        reply += `\n\n**📊 Results:**\n\`\`\`json\n${JSON.stringify(crudData.rows, null, 2)}\n\`\`\``;
+                        const rows = crudData.rows;
+                        const cols = Object.keys(rows[0] || {});
+
+                        if (cols.length > 0) {
+                          const header = `| ${cols.join(' | ')} |`;
+                          const sep = `| ${cols.map(() => '---').join(' | ')} |`;
+                          const body = rows
+                            .slice(0, 50) // safety limit
+                            .map(r => `| ${cols.map(c => {
+                              const v = r[c];
+                              if (v === null || v === undefined) return '';
+                              const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+                              return s.replace(/\n/g, ' ').slice(0, 80);
+                            }).join(' | ')} |`)
+                            .join('\n');
+
+                          reply += `\n\n**📊 Results (first ${Math.min(rows.length, 50)} rows):**\n${header}\n${sep}\n${body}`;
+                        } else {
+                          reply += `\n\n**📊 Results:** (no columns found)`;
+                        }
                       } else if (crudOp.action === 'DELETE' || crudOp.action === 'UPDATE' || crudOp.action === 'CREATE') {
                         reply += `\n\n**✅ Operation completed successfully!**`;
                       }
